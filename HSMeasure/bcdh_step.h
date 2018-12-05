@@ -7,8 +7,8 @@
 #include <qstringlist.h>
 #include "lalg.h"
 
-#define CHECKNUM 5
-#define GET_LASER_RESULT
+#define CHECKNUM 1
+//#define GET_LASER_RESULT
 class BCDH_step : public QObject
 {
 	Q_OBJECT
@@ -50,6 +50,7 @@ private:
 
 	int mCurStep = 0;
 	HSMeasure* mpHSMeasure;
+	DWORD mCurSystemTime;
 
 };
 

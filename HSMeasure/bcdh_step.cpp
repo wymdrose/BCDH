@@ -19,22 +19,6 @@ const BCDH_step::STEP_MAP BCDH_step::arrayStepMap[(SlotposNo4 + 1) * (StepJ + 1)
 
 };
 
-
-//const QStringList POS_STEP =
-//{
-//	"StepC_1", "StepH_1",
-//	"StepC_2", "StepH_2", "StepD_1", "StepG_1",
-//	"StepB_1", "StepI_1",
-//	"StepC_3", "StepH_3", "StepD_2", "StepG_2", "StepE_1", "StepF_1",
-//	"StepB_2", "StepI_2", "StepA_1", "StepJ_1",
-//	"StepC_4", "StepH_4", "StepD_3", "StepG_3", "StepE_2", "StepF_2",
-//	"StepB_3", "StepI_3", "StepA_2", "StepJ_2",
-//	"StepD_4", "StepG_4", "StepE_3", "StepF_3",
-//	"StepB_4", "StepI_4", "StepA_3", "StepJ_3",
-//	"StepE_4", "StepF_4",
-//	"StepA_4", "StepJ_4"
-//};
-
 BCDH_step::BCDH_step(HSMeasure* pHSMeasure)
 	: mpHSMeasure(pHSMeasure)
 {
@@ -162,7 +146,7 @@ void BCDH_step::GetTwoHeadData(LJIF_OPENPARAM_ETHERNET config, float* buf1, floa
 		num = 1;
 	if (num > 5)
 		num = 5;
-
+	
 	iLSRet = m_pLoadDllfunc->LJIF_OpenDeviceETHER(&config);
 	if (iLSRet)
 	{
@@ -178,6 +162,13 @@ void BCDH_step::GetTwoHeadData(LJIF_OPENPARAM_ETHERNET config, float* buf1, floa
 	
 	m_pLoadDllfunc->LJIF_CloseDevice();
 	
+	/*
+	if (config.IPAddress.S_un.S_un_b.s_b3 == laser1_config.IPAddress.S_un.S_un_b.s_b3)
+	{
+		Sleep(80);
+	}
+	*/
+
 	Sleep(30);//delay for opening laser controler 
 
 	iLSRet = m_pLoadDllfunc->LJIF_OpenDeviceETHER(&config);
@@ -283,7 +274,6 @@ bool BCDH_step::getPosFromCfg()
 	return true;
 }
 
-
 void valuesProcess(float tValues[], int numIn)
 {
 	int tNum = numIn;
@@ -319,33 +309,29 @@ void valuesProcess(float tValues[], int numIn)
 	}
 }
 
-
 bool BCDH_step::getStepValue(QString posStep, float stepValue[])
 {
-	static DWORD curSystemTime = GetTickCount();;
-
 	auto a = POS_STEP.indexOf(posStep);
 
-	if (false == mpHSMeasure->mpMOTIONLib->mpDmcAxis[mpHSMeasure->mCardNo][mpHSMeasure->laserAxisNo]->moveAndCheck(posLaserAxis[arrayStepMap[a].laserPos]))
-	{
-		return false;
-	}
-
-	//0   2   4   8   12   18   22   28   32   36   38
+	
 	if (mCurStep == 0 || mCurStep == 2 || mCurStep == 4 || mCurStep == 8 || mCurStep == 12 || mCurStep == 18 || mCurStep == 22 || mCurStep == 28 || mCurStep == 32 || mCurStep == 36 || mCurStep == 38)
 	{	
-		if (GetTickCount() - curSystemTime < 500)
+		if (GetTickCount() - mCurSystemTime < 120)
 		{
 			return false;
 		}
-		
+	
 	}
 	
-	curSystemTime = GetTickCount();
+	if (mCurStep == 0 || mCurStep == 1)
+	{
+		Sleep(80);
+	}
 
 	int tLaserNo = arrayStepMap[a].laserNo;
 	#ifndef GET_LASER_RESULT
 	float buf1[800] = { 999.999 };
+	float buf2[800] = { 999.999 };
 	#else 
 	
 	#endif
@@ -354,7 +340,7 @@ bool BCDH_step::getStepValue(QString posStep, float stepValue[])
 	case 1:
 	case 6:
 		#ifndef GET_LASER_RESULT
-		GetOneHeadData(LJIF_PROFILETARGET_HEAD_A, laser1_config, buf1, CHECKNUM); 
+		GetTwoHeadData(laser1_config, buf1, buf2, CHECKNUM);
 		#else
 		mpHSMeasure->get_laser_result(1, stepValue);
 		#endif
@@ -364,7 +350,7 @@ bool BCDH_step::getStepValue(QString posStep, float stepValue[])
 	case 2:
 	case 5:
 		#ifndef GET_LASER_RESULT
-		GetOneHeadData(LJIF_PROFILETARGET_HEAD_A, laser2_config, buf1, CHECKNUM);
+		GetTwoHeadData(laser2_config, buf1, buf2, CHECKNUM);
 		#else
 		mpHSMeasure->get_laser_result(2, stepValue);
 		#endif
@@ -373,7 +359,7 @@ bool BCDH_step::getStepValue(QString posStep, float stepValue[])
 	case 3:
 	case 4:
 		#ifndef GET_LASER_RESULT
-		GetOneHeadData(LJIF_PROFILETARGET_HEAD_A, laser3_config, buf1, CHECKNUM); 
+		GetTwoHeadData(laser3_config, buf1, buf2, CHECKNUM);
 		#else
 		mpHSMeasure->get_laser_result(3, stepValue);
 		#endif
@@ -384,14 +370,25 @@ bool BCDH_step::getStepValue(QString posStep, float stepValue[])
 	}
 
 #ifndef GET_LASER_RESULT
-	double raw_data[LASER_VALUE_NUM];
-	double result[10];
+	double raw_data[2][LASER_VALUE_NUM];
+	double result[2][10];
 
-	uint sf1_start = mpHSMeasure->vWavePosition[tLaserNo + 1][1].toInt();
-	uint sf1_end = mpHSMeasure->vWavePosition[tLaserNo + 1][2].toInt();
-	uint sf2_start = mpHSMeasure->vWavePosition[tLaserNo + 1][3].toInt();
-	uint sf2_end = mpHSMeasure->vWavePosition[tLaserNo + 1][4].toInt();
+	uint sf1_start[2];
+	uint sf1_end[2];
+	uint sf2_start[2];
+	uint sf2_end[2];
+
+	sf1_start[0] = mpHSMeasure->vWavePosition[tLaserNo + 1][1].toInt();
+	sf1_end[0] = mpHSMeasure->vWavePosition[tLaserNo + 1][2].toInt();
+	sf2_start[0] = mpHSMeasure->vWavePosition[tLaserNo + 1][3].toInt();
+	sf2_end[0] = mpHSMeasure->vWavePosition[tLaserNo + 1][4].toInt();
 	
+	sf1_start[1] = mpHSMeasure->vWavePosition[6 - tLaserNo][1].toInt();
+	sf1_end[1] = mpHSMeasure->vWavePosition[6 - tLaserNo][2].toInt();
+	sf2_start[1] = mpHSMeasure->vWavePosition[6 - tLaserNo][3].toInt();
+	sf2_end[1] = mpHSMeasure->vWavePosition[6 - tLaserNo][4].toInt();
+
+
 	if (tLaserNo == laserNo6 || tLaserNo == laserNo5 || tLaserNo == laserNo4 || tLaserNo == laserNo3 || tLaserNo == laserNo2)
 	{
 //		std::reverse(&buf1[0], &buf1[LASER_VALUE_NUM - 1]);
@@ -399,14 +396,17 @@ bool BCDH_step::getStepValue(QString posStep, float stepValue[])
 		
 	for (size_t i = 0; i < LASER_VALUE_NUM; i++)
 	{
-		raw_data[i] = buf1[i];
+		raw_data[0][i] = buf1[i];
+		raw_data[1][i] = buf2[i];
 	}
 
 	LALG mLALG;
 
-	mLALG.calculate_result(raw_data, result, sf1_start, sf1_end, sf2_start, sf2_end);
+	mLALG.calculate_result(raw_data[0], result[0], sf1_start[0], sf1_end[0], sf2_start[0], sf2_end[0]);
+	mLALG.calculate_result(raw_data[1], result[1], sf1_start[1], sf1_end[1], sf2_start[1], sf2_end[1]);
 
-	stepValue = result[0];
+	stepValue[0] = result[0][0];
+	stepValue[1] = result[1][0];
 	#else
 	
 	#endif
@@ -421,6 +421,14 @@ bool BCDH_step::getStepValue()
 
 	for (; mCurStep < POS_STEP.size(); mCurStep+=2)
 	{
+		auto a = POS_STEP.indexOf(POS_STEP[mCurStep]);
+
+		if (false == mpHSMeasure->mpMOTIONLib->mpDmcAxis[mpHSMeasure->mCardNo][mpHSMeasure->laserAxisNo]->moveAndCheck(posLaserAxis[arrayStepMap[a].laserPos]))
+		{
+			mCurSystemTime = GetTickCount();
+			return false;
+		}
+		
 		if (false == getStepValue(POS_STEP[mCurStep], tValue))
 		{
 			return false;
@@ -509,7 +517,6 @@ void  BCDH_step::ShowStepValueToView()
 
 
 }
-
 
 void  BCDH_step::get_laser_result(LJIF_PROFILETARGET head, LJIF_OPENPARAM_ETHERNET config, float* result,int program, int nStep)
 {

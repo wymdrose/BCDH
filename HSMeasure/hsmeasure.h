@@ -93,7 +93,7 @@ public:
 	CLoadLJDllFunc * m_pLoadDllfunc;
 	
 	bool dogCheck();
-	inline void netPing();
+	inline bool netPing();
 	void initValue();
 	void initDmcCard();
 	void login();
@@ -151,6 +151,7 @@ public:
 
 	int stepFiberFlag[SlotposNo4 + 1];
 	
+	int BBREAK;
 	int modeRunNullFlag;
 	int modeRepeatFlag;
 	float SpeedPercent;	
@@ -216,6 +217,8 @@ public:
 	QQueue<std::array<int,2>> ngTypeQueue;
 	
 	int mCardNo = 0;
+
+	QTimer *pDogTimer;
 	QTimer *pIoTimer;
 	QTimer *pValShowTimer;
 		
@@ -226,7 +229,7 @@ public:
 	QCheckBox* m_laserTrig[6];
 
 	std::vector<QStringList> vWavePosition;
-
+	_FILECLASS::CSV_FILE* pCsvWavePosition;
 	//¼¤¹âtabÒ³µÄlayout
 	QVBoxLayout* m_mainLayout;
 	QHBoxLayout* m_midBarLayout;
@@ -265,6 +268,7 @@ private:
 	void hs_RestAlm();
 	void hs_Mute();
 	//
+	void onDogTimer();
 	void onIoTimer();
 	void onToValShowTimer();
 	void onTabWidgetChanged(int);

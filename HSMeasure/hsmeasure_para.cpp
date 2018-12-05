@@ -78,8 +78,7 @@ void HSMeasure::hsmeasure_para()
 
 	});
 	
-	//
-	
+	//	
 	connect(ui.pushButtonLaserSendIp1, &QPushButton::clicked, [this](){
 		
 		float buf1[LASER_VALUE_NUM];
@@ -1112,7 +1111,9 @@ void HSMeasure::hsmeasure_para()
 			if (true == mpBCDH_step->getStepValue())
 			{
 				break;
-			}		
+			}
+			
+			ui.lineEditCurPositionLaser->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][laserAxisNo]->curPosition()));	
 		}
 
 		saveStepToLog(stepValues);
@@ -1128,6 +1129,9 @@ void HSMeasure::hsmeasure_para()
 
 		while (true)
 		{
+			ui.lineEditCurPositionCcd->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][ccdAxisNo]->curPosition()));
+			ui.lineEditCurPositionPlatform->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][platformAxisNo]->curPosition()));
+
 			QApplication::processEvents();
 
 			if (false == mpBCDH_gap->getGapValueFront())
@@ -1145,6 +1149,9 @@ void HSMeasure::hsmeasure_para()
 
 		while (true)
 		{
+			ui.lineEditCurPositionCcd->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][ccdAxisNo]->curPosition()));
+			ui.lineEditCurPositionPlatform->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][platformAxisNo]->curPosition()));
+
 			QApplication::processEvents();
 
 			if (false == mpBCDH_gap->getGapValueSide())

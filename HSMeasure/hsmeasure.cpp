@@ -1,5 +1,4 @@
 
-
 #include "hsmeasure.h"
 #include "bcdh_gap.h"
 #include "bcdh_step.h"
@@ -8,7 +7,6 @@
 QString mPath;
 BCDH_gap* mpBCDH_gap;
 BCDH_step* mpBCDH_step;
-
 
 HSMeasure::HSMeasure(QWidget *parent)
 	: QMainWindow(parent)
@@ -27,6 +25,11 @@ HSMeasure::HSMeasure(QWidget *parent)
 	login();
 	hsmeasure_para();
 
+	//	
+	pDogTimer = new QTimer(this);
+	connect(pDogTimer, SIGNAL(timeout()), this, SLOT(onDogTimer()));
+	pDogTimer->start(1000 * 60 * 5);
+	
 	//
 	pIoTimer = new QTimer(this);
 	connect(pIoTimer, SIGNAL(timeout()), this, SLOT(onIoTimer()));
@@ -398,18 +401,23 @@ void HSMeasure::init()
 
 	ui.tabWidget->insertTab(2, laserWidget, QStringLiteral("激光参数"));  //激光参数tab页
 
-	_FILECLASS::CSV_FILE tCsv(QCoreApplication::applicationDirPath() + "/cfg/laserWave.csv");
-	tCsv.get(vWavePosition);
-
+	pCsvWavePosition = new _FILECLASS::CSV_FILE(QCoreApplication::applicationDirPath() + "/cfg/laserWave.csv");
+	pCsvWavePosition->get(vWavePosition);
+	
 	for (size_t i = 0; i < 6; i++)
 	{
 		for (size_t j = 0; j < 4; j++)
 		{
 			m_laseWave[i][j]->setText(vWavePosition[i + 1][j + 1]);
+
+			connect(m_laseWave[i][j], &QLineEdit::editingFinished, [this, i, j]()
+			{
+				vWavePosition[i + 1][j + 1] = m_laseWave[i][j]->text();
+			});
 		}
 	}
 
-
+	
 //	deal_raw_data();
 	
 }
@@ -420,10 +428,18 @@ void HSMeasure::onTabWidgetChanged(int tabIndex)
 
 	if (1 == tabIndex)
 	{
-		ui.lineEditJogSpeedCcd->setText(QString("%1").arg(speedFromIni.ccdJogSpeed));
+		ui.lineEditCurPositionCcd->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][ccdAxisNo]->curPosition()));
+		ui.lineEditCurPositionLaser->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][laserAxisNo]->curPosition()));
+		ui.lineEditCurPositionRotate->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][rotateAxisNo]->curPosition()));
 		
-
+		ui.lineEditCurPositionPlatform->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][platformAxisNo]->curPosition()));	
+		ui.lineEditCurPositionUnload->setText(QString("%1").arg(mpDMC5000Lib->mpDmcAxis[mCardNo][unloadAxisNo]->curPosition()));
 	}
+}
+
+void HSMeasure::onDogTimer()
+{
+	dogCheck();
 }
 
 void HSMeasure::initDmcCard()
@@ -688,8 +704,7 @@ void HSMeasure::caseHome()  //回原流程
 			homeStep++;
 		break;
 		
-	case 16:
-		
+	case 16:	
 		mpDMC5000Lib->mpDmcAxis[mCardNo][ccdAxisNo]->setMovePara(SpeedPercent * speedFromIni.ccdAutoSpeed, ABSOLUTE_MOTION);		//X1
 		mpDMC5000Lib->mpDmcAxis[mCardNo][laserAxisNo]->setMovePara(SpeedPercent * speedFromIni.laserAutoSpeed, ABSOLUTE_MOTION);	//X2
 		mpDMC5000Lib->mpDmcAxis[mCardNo][rotateAxisNo]->setMovePara(SpeedPercent * speedFromIni.rotateAutoSpeed, ABSOLUTE_MOTION);	//X3
@@ -697,16 +712,34 @@ void HSMeasure::caseHome()  //回原流程
 		mpDMC5000Lib->mpDmcAxis[mCardNo][unloadAxisNo]->setMovePara(SpeedPercent * speedFromIni.unloadAutoSpeed, ABSOLUTE_MOTION);	//Y2
 		homeStep++;
 		break;
+	
+	case 17:
+		if (sensorIn(Fiber5) == IO_ON || sensorIn(Fiber6) == IO_ON || sensorIn(Fiber7) == IO_ON || sensorIn(Fiber8) == IO_ON)
+		{
+			showMsgSignal(QStringLiteral("请先手动排料, 回原失败"));
+			
+			colorSignal(ui.pushButtonZero, "QPushButton{background:red}");
+			mRunFlag.mbHome = false;
+			homeStep = -1;
+		}
+		else
+		{
+			homeStep++;
+		}
+		break;
 	default:
 		break;
 	}
 
-	if (homeStep > 16)
+	if (homeStep > 17)
 	{
 		colorSignal(ui.pushButtonZero, "QPushButton{background:lightgreen}");
 		mRunFlag.mbHome = true;
 		homeStep = -1;
 	}
+
+	
+
 }
 
 void HSMeasure::hs_zero()  //回原button clicked
@@ -993,7 +1026,7 @@ void HSMeasure::caseOpposite()
 
 	if (mRunFlag.okBelt)
 	{
-		if (GetTickCount() - curSystemTime < 300)
+		if (GetTickCount() - curSystemTime < 200)
 		{
 			sensorOut(LineUnloadOkRun, IO_ON);
 			return;
@@ -1099,7 +1132,7 @@ void HSMeasure::stateMonitor()
 		return;
 	}
 
-	if ((GetTickCount() - curSystemTime) < 1000 * 12)
+	if ((GetTickCount() - curSystemTime) < 1000 * 2)
 	{
 		return;
 	}
@@ -1769,7 +1802,7 @@ inline void HSMeasure::caseFlow3()
 		curStateFlow3++;
 		break;
 	case 15:
-		if ((GetTickCount() - curSystemTime) > 100)
+		if ((GetTickCount() - curSystemTime) > 300)
 		{
 			curStateFlow3++;
 		}
@@ -1828,9 +1861,19 @@ inline void HSMeasure::caseFlow3()
 	case 25:		
 		curStateFlow3++;
 		showMsgSignal(QStringLiteral("激光测量..."));
+		mpMOTIONLib->mpDmcAxis[mCardNo][laserAxisNo]->setMovePara(100000 + SpeedPercent * speedFromIni.laserAutoSpeed, ABSOLUTE_MOTION);	//X2
 		break;
 
 	case 26:
+		if (false == mpMOTIONLib->mpDmcAxis[mCardNo][laserAxisNo]->moveAndCheck(posionFromIni.basePositionLaser))
+		{           
+			break;
+		}
+		
+		mpMOTIONLib->mpDmcAxis[mCardNo][laserAxisNo]->setMovePara(SpeedPercent * speedFromIni.laserAutoSpeed, ABSOLUTE_MOTION);	//X2
+		curStateFlow3++;
+
+	case 27:
 		if (true == mpBCDH_step->getStepValue())
 		{
 			curStateFlow3++;
@@ -1838,27 +1881,27 @@ inline void HSMeasure::caseFlow3()
 
 		break;
 
-	case 27:	
+	case 28:	
 		stepQueue.enqueue(stepValues);
 	
 		curStateFlow3++;
 		break;
 
-	case 28:	
+	case 29:	
 		if (true == mpMOTIONLib->mpDmcAxis[mCardNo][laserAxisNo]->moveAndCheck(posionFromIni.LaserSafePosition))
 		{
 			curStateFlow3++;
 			showMsgSignal(QStringLiteral("X2 SAFE..."));	
 		}
 		break;
-	case 29:
+	case 30:
 		if (IO_OFF == dmc_read_can_inbit(mCardNo, 3, 11))
 		{
 			curStateFlow3++;		
 		}
 		break;
 
-	case 30:
+	case 31:
 		if (curStateFlow4 != -1)
 		{
 			break;
@@ -1866,7 +1909,7 @@ inline void HSMeasure::caseFlow3()
 		curStateFlow3++;
 		break;
 		
-	case 31:
+	case 32:
 		if (-1 == curStateFlow2 && stepQueue.size()==1)
 		{
 			ok_ngResult();
@@ -1876,11 +1919,7 @@ inline void HSMeasure::caseFlow3()
 	
 		curStateFlow3++;
 		break;
-	
-	case 32:
-		curStateFlow3++;
-		break;
-	
+		
 	case 33:	
 		if (curStateOut != -1 || curStateFlow4 != -1)
 		{
@@ -2113,11 +2152,8 @@ void HSMeasure::caseNgBreak()
 
 		curNgType = ngTypeQueue.dequeue();
 
-		if (curNgType[0] == 0)	curNgType[0] = 3;
-		else if (curNgType[0] == 1)	curNgType[0] = 2;
-		else if(curNgType[0] == 2)	curNgType[0] = 1;
-		else if(curNgType[0] == 3)	curNgType[0] = 0;
-	
+		curNgType[0] = 3 - curNgType[0];
+
 		curStateNgBreak++;
 		break;
 	case 2:
@@ -2126,9 +2162,13 @@ void HSMeasure::caseNgBreak()
 		break;
 		
 	case 3:
-		if (MsResultNgGap == curNgType[1])	{ cylinderMove(UPDOWN_NG1_I); }
-		if (MsResultNgStep == curNgType[1])	{ cylinderMove(UPDOWN_NG1_I); cylinderMove(UPDOWN_NG2_I); }
-		if (MsResultNgBoth == curNgType[1])	{ cylinderMove(UPDOWN_NG1_I); cylinderMove(UPDOWN_NG2_I); cylinderMove(UPDOWN_NG3_I); }
+		if (BBREAK == 1)
+		{
+			if (MsResultNgGap == curNgType[1])	{ cylinderMove(UPDOWN_NG1_I); }
+			if (MsResultNgStep == curNgType[1])	{ cylinderMove(UPDOWN_NG1_I); cylinderMove(UPDOWN_NG2_I); }
+			if (MsResultNgBoth == curNgType[1])	{ cylinderMove(UPDOWN_NG1_I); cylinderMove(UPDOWN_NG2_I); cylinderMove(UPDOWN_NG3_I); }
+		}
+			
 		curSystemTime = GetTickCount();
 		curStateNgBreak++;
 		break;
@@ -2173,6 +2213,7 @@ void MY_THREAD::run()  //运动流程
 		short ioStart = mpHSMeasure->sensorIn(START);
 		short ioConfirm = mpHSMeasure->sensorIn(CONFIRM);
 		short ioStop = mpHSMeasure->sensorIn(STOP);
+		short ioReset = mpHSMeasure->sensorIn(RESET);
 		short ioEmgStop = mpHSMeasure->sensorIn(EMGSTOP);
 		mpHSMeasure->modeRepeatFlag = mpHSMeasure->sensorIn(SWITCH_MODE);
 
@@ -2181,6 +2222,18 @@ void MY_THREAD::run()  //运动流程
 			mpHSMeasure->hs_stop();
 			break;
 		}
+
+		if (IO_ON == ioStop)
+		{
+			mpHSMeasure->mRunFlag.mbPause = true;
+		}
+
+		if (IO_ON == ioReset)
+		{
+			mpHSMeasure->sensorOut(RedLight, IO_OFF);
+			mpHSMeasure->sensorOut(Buzzer, IO_OFF);
+		}
+		
 
 		if (true == mpHSMeasure->mRunFlag.mbStop)
 		{
@@ -2222,13 +2275,6 @@ void MY_THREAD::run()  //运动流程
 		{
 			settings.setValue("DEBUG/BSTART","0");
 			
-			if (mpHSMeasure->sensorIn(Fiber5) == IO_ON || mpHSMeasure->sensorIn(Fiber6) == IO_ON || mpHSMeasure->sensorIn(Fiber7) == IO_ON || mpHSMeasure->sensorIn(Fiber8) == IO_ON)
-			{
-				mpHSMeasure->showDialogSignal(QStringLiteral("请先手动排料"));
-				mpHSMeasure->hs_stop();
-				break;
-			}
-
 			if (-1 == mpHSMeasure->curStateFlow1)
 			{
 				mpHSMeasure->curStateFlow1 = 0;
@@ -2241,46 +2287,69 @@ void MY_THREAD::run()  //运动流程
 
 }
 
-inline void HSMeasure::netPing()
+inline bool HSMeasure::netPing()
 {
 	if (mpTcpClientCcd[0]->connect() == false)
 	{
 		show_msg("Ccd1 connect error.");
-//		return;
+		return false;
 	}
 	mpTcpClientCcd[0]->disConnect();
 
 	if (mpTcpClientCcd[1]->connect() == false)
 	{
 		show_msg("Ccd2 connect error.");
-//		return;
+		return false;
 	}
 	mpTcpClientCcd[1]->disConnect();
-
 	
 	//
+	if (m_pLoadDllfunc->LJIF_OpenDeviceETHER(&laser1_config) != 0)
+	{
+		show_msg("laser1_config connect error.");
+		return false;
+	}
+	m_pLoadDllfunc->LJIF_CloseDevice();
+
+	if (m_pLoadDllfunc->LJIF_OpenDeviceETHER(&laser2_config) != 0)
+	{
+		show_msg("laser2_config connect error.");
+		return false;
+	}
+	m_pLoadDllfunc->LJIF_CloseDevice();
+
+	if (m_pLoadDllfunc->LJIF_OpenDeviceETHER(&laser3_config) != 0)
+	{
+		show_msg("laser3_config connect error.");
+		return false;
+	}
+	m_pLoadDllfunc->LJIF_CloseDevice();
+
+
 	/*
 	if (mpTcpClientLaser[0]->connect() == false)
 	{
 		show_msg("Laser1 connect error.");
-//		return;
+		return;
 	}
 	mpTcpClientLaser[0]->disConnect();
 
 	if (mpTcpClientLaser[1]->connect() == false)
 	{
 		show_msg("Laser2 connect error.");
-//		return;
+		return;
 	}
 	mpTcpClientLaser[1]->disConnect();
 
 	if (mpTcpClientLaser[2]->connect() == false)
 	{
 		show_msg("Laser3 connect error.");
-//		return;
+		return;
 	}
 	mpTcpClientLaser[2]->disConnect();
 	*/
+
+	return true;
 }
 
 bool HSMeasure::dogCheck()
@@ -2289,6 +2358,7 @@ bool HSMeasure::dogCheck()
 	dogStatus status;
 
 	//
+	/*
 	CDog dog1(CDogFeature::defaultFeature());
 
 	status = dog1.login(vendorCode);
@@ -2298,7 +2368,8 @@ bool HSMeasure::dogCheck()
 		QMessageBox::warning(this, "", QStringLiteral("请插入超级狗"));
 		return false;
 	}
-	
+	*/
+
 	//
 	CDogFeature feature25 = CDogFeature::fromFeature(25);
 	const char* defaultScope = "<dogscope />";
@@ -2351,11 +2422,17 @@ bool HSMeasure::dogCheck()
 void HSMeasure::hs_start()  //启动button clicked
 {	
 	//
-	dogCheck();
+	if (false == dogCheck())
+	{
+		return;
+	}
 
 	//
 
-	netPing();
+	if (false == netPing())
+	{
+		return;
+	}
 
 	ui.pushButtonStart->setStyleSheet("QPushButton{background:lightgreen}");
 	ableSignal(ui.pushButtonStart, false);
@@ -2453,6 +2530,7 @@ void HSMeasure::load_ini()
 	offsetStep_H = settings.value("OFFSET/offsetStep_H").toFloat();
 
 	//
+	BBREAK = settings.value("DEBUG/BBREAK").toInt();
 	modeRunNullFlag = settings.value("DEBUG/modeRunNullFlag").toInt();
 	CYLINDER_DELAY = settings.value("DEBUG/CYLINDER_DELAY").toInt();
 	SpeedPercent = settings.value("DEBUG/SpeedPercent").toFloat();
@@ -2536,10 +2614,29 @@ void HSMeasure::write_log_to_txt(const QString &file_name)
 
 void HSMeasure::closeEvent(QCloseEvent *event)
 {
-
 	save_ini();
 
 	mpDMC5000Lib->emgStop();
+
+	mpDMC5000Lib->mpDmcAxis[mCardNo][ccdAxisNo]->sevonOnOff(DMC_SERV_DISABLE);
+	mpDMC5000Lib->mpDmcAxis[mCardNo][laserAxisNo]->sevonOnOff(DMC_SERV_DISABLE);
+	mpDMC5000Lib->mpDmcAxis[mCardNo][rotateAxisNo]->sevonOnOff(DMC_SERV_DISABLE);
+	mpDMC5000Lib->mpDmcAxis[mCardNo][platformAxisNo]->sevonOnOff(DMC_SERV_DISABLE);
+	mpDMC5000Lib->mpDmcAxis[mCardNo][unloadAxisNo]->sevonOnOff(DMC_SERV_DISABLE);
+
+	pCsvWavePosition->clear();
+
+	for (size_t i = 0; i < 6 + 1; i++)
+	{
+		QStringList tList;
+
+		for (size_t j = 0; j < 4 + 1; j++)
+		{
+			tList.append(vWavePosition[i][j]);
+		}
+
+		pCsvWavePosition->append(tList);
+	}
 
 	dmc_board_close();
 }

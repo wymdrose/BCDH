@@ -25,8 +25,22 @@ namespace _FILECLASS
 		
 
 	public:
+		void clear()
+		{
+			mpCsvFile->open(QIODevice::ReadOnly);	
+			mpCsvFile->close();
+
+			mpCsvFile->open(QIODevice::Truncate);
+			mpCsvFile->close();
+			
+			mpCsvFile->open(QIODevice::WriteOnly);		
+			mpCsvFile->close();
+		}
+
 		bool append(const QStringList& tLine)
 		{
+			mpCsvFile->open(QIODevice::ReadWrite | QIODevice::Append);
+
 			if (!mpCsvFile->isOpen())	{return false;}
 
 		  //if (!mpCsvFile->resize(0))

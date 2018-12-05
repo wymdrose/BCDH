@@ -193,7 +193,6 @@ void HSMeasure::cylinderMove(const IO_CYLINDER name)	//气缸运动
 		ioOut("OUT23", IO_ON);
 		break;
 
-		/*
 	case UPDOWN_NG1_o:
 		ioOut("OUT29", IO_OFF);
 		ioOut("OUT2A", IO_ON);
@@ -220,7 +219,7 @@ void HSMeasure::cylinderMove(const IO_CYLINDER name)	//气缸运动
 		ioOut("OUT2E", IO_OFF);
 		ioOut("OUT2D", IO_ON);
 		break;
-		*/
+		
 	default:
 		break;
 	}

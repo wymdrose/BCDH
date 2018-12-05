@@ -195,6 +195,11 @@ bool BCDH_gap::gapMove(const GAP_NO gapNo)
 		return false;
 	}
 
+	if (gapNo == GapC || gapNo == GapH)
+	{
+		Sleep(50);
+	}
+
 	return true;
 
 }
